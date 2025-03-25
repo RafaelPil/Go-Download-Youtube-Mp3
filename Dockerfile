@@ -1,7 +1,7 @@
-# Use Go version that matches your go.mod
-FROM golang:latest 
+# Use Alpine-based Go image
+FROM golang:1.23-alpine
 
-# Install FFmpeg
+# Install FFmpeg using apk
 RUN apk add --no-cache ffmpeg
 
 # Rest remains the same
