@@ -1,0 +1,33 @@
+# Ignore Go binary files
+*.exe
+*.out
+*.test
+
+# Ignore Go module cache
+/vendor/
+
+# Ignore IDE/editor configuration files
+.idea/
+.vscode/
+
+# Ignore environment variable files (like .env)
+.env
+
+# Ignore log files
+*.log
+
+# Ignore compiled Go files (for Windows, Linux, etc.)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Ignore temporary files created by Go (e.g., go build)
+build/
+
+# Ignore coverage files
+*.coverprofile
+
+# Ignore Go workspace
+go.work
