@@ -215,56 +215,55 @@ func downloadVideo(client *youtube.Client, video *youtube.Video, format *youtube
     var lastError error
 
     for i := 0; i < maxRetries; i++ {
-        // Try both GetStream and GetStreamURL approaches
-        var reader io.ReadCloser
-        var err error
-
-        // First try GetStream
-        reader, _, err = client.GetStream(video, format)
+        // Try getting the stream URL directly
+        streamURL, err := client.GetStreamURL(video, format)
         if err != nil {
-            // If GetStream fails, try GetStreamURL
-            var streamURL string
-            streamURL, err = client.GetStreamURL(video, format)
-            if err != nil {
-                lastError = fmt.Errorf("both GetStream and GetStreamURL failed: %w", err)
-                time.Sleep(time.Second * time.Duration(i+1))
-                continue
-            }
-
-            // Download using HTTP client
-            resp, err := http.Get(streamURL)
-            if err != nil {
-                lastError = fmt.Errorf("http.Get failed: %w", err)
-                time.Sleep(time.Second * time.Duration(i+1))
-                continue
-            }
-            reader = resp.Body
-        }
-
-        // Create output file
-        file, err := os.Create(outputPath)
-        if err != nil {
-            reader.Close()
-            return fmt.Errorf("creating file: %w", err)
-        }
-
-        // Copy data
-        _, err = io.Copy(file, reader)
-        reader.Close()
-        file.Close()
-
-        if err != nil {
-            os.Remove(outputPath)
-            lastError = fmt.Errorf("copying data: %w", err)
+            lastError = fmt.Errorf("GetStreamURL failed: %w", err)
             time.Sleep(time.Second * time.Duration(i+1))
             continue
         }
 
-        return nil
+        // Download using HTTP client
+        resp, err := http.Get(streamURL)
+        if err != nil {
+            lastError = fmt.Errorf("HTTP download failed: %w", err)
+            time.Sleep(time.Second * time.Duration(i+1))
+            continue
+        }
+        defer resp.Body.Close()
+
+        // Create output file
+        file, err := os.Create(outputPath)
+        if err != nil {
+            return fmt.Errorf("creating file failed: %w", err)
+        }
+        defer file.Close()
+
+        // Copy data with timeout
+        errChan := make(chan error, 1)
+        go func() {
+            _, err := io.Copy(file, resp.Body)
+            errChan <- err
+        }()
+
+        select {
+        case err := <-errChan:
+            if err != nil {
+                lastError = fmt.Errorf("copying data failed: %w", err)
+                os.Remove(outputPath)
+                continue
+            }
+            return nil
+        case <-time.After(5 * time.Minute):
+            lastError = fmt.Errorf("download timed out")
+            os.Remove(outputPath)
+            continue
+        }
     }
 
     return fmt.Errorf("after %d attempts: %w", maxRetries, lastError)
 }
+
 // Convert video to MP3 using FFmpeg
 func convertToMP3(inputPath, outputPath string) error {
 	// Check if input file exists
