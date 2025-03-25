@@ -163,48 +163,50 @@ func isYouTubeLink(url string) bool {
 
 // Download and convert YouTube video to MP3
 func downloadAndConvert(videoURL, outputDir string) (string, error) {
-	// Generate safe filename
-	videoID := ""
-	if strings.Contains(videoURL, "v=") {
-		videoID = strings.Split(strings.Split(videoURL, "v=")[1], "&")[0]
-	} else if strings.Contains(videoURL, "youtu.be/") {
-		videoID = strings.Split(strings.Split(videoURL, "youtu.be/")[1], "?")[0]
-	}
-	
-	if videoID == "" {
-		return "", fmt.Errorf("could not extract video ID from URL")
-	}
+    // Generate safe filename
+    videoID := ""
+    if strings.Contains(videoURL, "v=") {
+        videoID = strings.Split(strings.Split(videoURL, "v=")[1], "&")[0]
+    } else if strings.Contains(videoURL, "youtu.be/") {
+        videoID = strings.Split(strings.Split(videoURL, "youtu.be/")[1], "?")[0]
+    }
+    
+    if videoID == "" {
+        return "", fmt.Errorf("could not extract video ID from URL")
+    }
 
-	mp3Path := filepath.Join(outputDir, fmt.Sprintf("%s.mp3", videoID))
+    mp3Path := filepath.Join(outputDir, fmt.Sprintf("%s.mp3", videoID))
 
-	// yt-dlp command with better error handling
-	cmd := exec.Command("yt-dlp",
-		"-x",                     // Extract audio
-		"--audio-format", "mp3",  // Convert to MP3
-		"--audio-quality", "0",   // Best quality
-		"-o", mp3Path,            // Output path
-		"--no-warnings",          // Suppress warnings
-		"--ignore-errors",        // Continue on errors
-		"--extract-audio",        // Audio only
-		videoURL,
-	)
+    // yt-dlp command with better error handling
+    cmd := exec.Command("yt-dlp",
+        "-x",                     // Extract audio
+        "--audio-format", "mp3",   // Convert to MP3
+        "--audio-quality", "0",    // Best quality
+        "-o", mp3Path,             // Output path
+        "--no-warnings",           // Suppress warnings
+        "--ignore-errors",         // Continue on errors
+        "--extract-audio",         // Audio only
+        "--force-ipv4",            // Force IPv4
+        "--geo-bypass",            // Bypass geographic restrictions
+        videoURL,
+    )
 
-	// Capture output for debugging
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+    // Capture output for debugging
+    var stdout, stderr bytes.Buffer
+    cmd.Stdout = &stdout
+    cmd.Stderr = &stderr
 
-	// Run with timeout
-	err := cmd.Run()
-	if err != nil {
-		return "", fmt.Errorf("yt-dlp error: %v\nStdout: %s\nStderr: %s", 
-			err, stdout.String(), stderr.String())
-	}
+    // Run with timeout
+    err := cmd.Run()
+    if err != nil {
+        return "", fmt.Errorf("yt-dlp error: %v\nStdout: %s\nStderr: %s", 
+            err, stdout.String(), stderr.String())
+    }
 
-	// Verify output
-	if _, err := os.Stat(mp3Path); os.IsNotExist(err) {
-		return "", fmt.Errorf("output file not created")
-	}
+    // Verify output
+    if _, err := os.Stat(mp3Path); os.IsNotExist(err) {
+        return "", fmt.Errorf("output file not created")
+    }
 
-	return mp3Path, nil
+    return mp3Path, nil
 }
