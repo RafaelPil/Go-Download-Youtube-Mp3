@@ -1,9 +1,11 @@
 FROM golang:1.23-alpine
 
-# Install FFmpeg + yt-dlp (standalone binary)
-RUN apk add --no-cache ffmpeg && \
-    wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp && \
-    chmod a+rx /usr/local/bin/yt-dlp
+# Install dependencies (FFmpeg + Python + yt-dlp)
+RUN apk add --no-cache \
+    ffmpeg \
+    python3 \
+    py3-pip \
+    && pip install --upgrade yt-dlp
 
 WORKDIR /app
 COPY go.mod go.sum ./

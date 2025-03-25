@@ -178,16 +178,15 @@ func downloadAndConvert(videoURL, outputDir string) (string, error) {
     mp3Path := filepath.Join(outputDir, fmt.Sprintf("%s.mp3", videoID))
 
     // yt-dlp command with better error handling
-    cmd := exec.Command("yt-dlp",
-        "-x",                     // Extract audio
-        "--audio-format", "mp3",   // Convert to MP3
-        "--audio-quality", "0",    // Best quality
-        "-o", mp3Path,             // Output path
-        "--no-warnings",           // Suppress warnings
-        "--ignore-errors",         // Continue on errors
-        "--extract-audio",         // Audio only
-        "--force-ipv4",            // Force IPv4
-        "--geo-bypass",            // Bypass geographic restrictions
+    cmd := exec.Command("python3", "-m", "yt_dlp", 
+        "-x",
+        "--audio-format", "mp3",
+        "--audio-quality", "0",
+        "-o", mp3Path,
+        "--no-warnings",
+        "--ignore-errors",
+        "--extract-audio",
+        "--force-ipv4",
         videoURL,
     )
 
