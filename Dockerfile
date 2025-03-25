@@ -1,21 +1,13 @@
-# Use a lightweight Go image
-FROM golang:1.21-alpine
+# Use Go version that matches your go.mod
+FROM golang:latest 
 
-# Install FFmpeg (required for audio conversion)
+# Install FFmpeg
 RUN apk add --no-cache ffmpeg
 
-# Set working directory
+# Rest remains the same
 WORKDIR /app
-
-# Copy Go modules
 COPY go.mod go.sum ./
 RUN go mod download
-
-# Copy source code
 COPY . .
-
-# Build the bot
 RUN go build -o bot .
-
-# Run the bot
 CMD ["./bot"]
