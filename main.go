@@ -2,9 +2,7 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -14,7 +12,6 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
-	"github.com/kkdai/youtube/v2"
 )
 
 func main() {
@@ -166,102 +163,50 @@ func isYouTubeLink(url string) bool {
 
 // Download and convert YouTube video to MP3
 func downloadAndConvert(videoURL, outputDir string) (string, error) {
-	client := youtube.Client{}
-
-	// Get video info
-	video, err := client.GetVideo(videoURL)
-	if err != nil {
-		return "", fmt.Errorf("getting video info: %w", err)
+	// Generate unique filename
+	videoID := strings.Split(videoURL, "v=")[1]
+	if strings.Contains(videoID, "&") {
+		videoID = strings.Split(videoID, "&")[0]
 	}
+	mp3Path := filepath.Join(outputDir, fmt.Sprintf("%s.mp3", videoID))
 
-	// Find the best audio format
-	formats := video.Formats.WithAudioChannels()
-	if len(formats) == 0 {
-		return "", fmt.Errorf("no audio formats available")
-	}
+	// yt-dlp command to download and convert in one step
+	cmd := exec.Command("yt-dlp",
+		"-x",                     // Extract audio
+		"--audio-format", "mp3",  // Convert to MP3
+		"--audio-quality", "0",   // Best quality
+		"-o", mp3Path,            // Output path
+		videoURL,                 // YouTube URL
+		"--force-overwrites",     // Overwrite if exists
+		"--quiet",                // Less verbose output
+	)
 
-	// Select the best quality audio format
-	bestFormat := formats[0]
-	for _, format := range formats {
-		if format.Bitrate > bestFormat.Bitrate {
-			bestFormat = format
+	// Run with timeout
+	done := make(chan error, 1)
+	go func() {
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			done <- fmt.Errorf("%v: %s", err, string(output))
+			return
 		}
+		done <- nil
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			return "", fmt.Errorf("yt-dlp failed: %w", err)
+		}
+	case <-time.After(10 * time.Minute):
+		return "", fmt.Errorf("conversion timed out after 10 minutes")
 	}
 
-	// Create output file paths
-	videoPath := filepath.Join(outputDir, fmt.Sprintf("%s.mp4", video.ID))
-	mp3Path := filepath.Join(outputDir, fmt.Sprintf("%s.mp3", video.ID))
-
-	// Download the video
-	if err := downloadVideo(&client, video, &bestFormat, videoPath); err != nil {
-		return "", fmt.Errorf("downloading video: %w", err)
+	// Verify output exists
+	if _, err := os.Stat(mp3Path); os.IsNotExist(err) {
+		return "", fmt.Errorf("output file not created")
 	}
-
-	// Convert to MP3
-	if err := convertToMP3(videoPath, mp3Path); err != nil {
-		cleanupFiles(videoPath)
-		return "", fmt.Errorf("converting to MP3: %w", err)
-	}
-
-	// Remove the temporary video file
-	cleanupFiles(videoPath)
 
 	return mp3Path, nil
-}
-
-// Download the video stream
-func downloadVideo(client *youtube.Client, video *youtube.Video, format *youtube.Format, outputPath string) error {
-    maxRetries := 3
-    var lastError error
-
-    for i := 0; i < maxRetries; i++ {
-        // Try getting the stream URL directly
-        streamURL, err := client.GetStreamURL(video, format)
-        if err != nil {
-            lastError = fmt.Errorf("GetStreamURL failed: %w", err)
-            time.Sleep(time.Second * time.Duration(i+1))
-            continue
-        }
-
-        // Download using HTTP client
-        resp, err := http.Get(streamURL)
-        if err != nil {
-            lastError = fmt.Errorf("HTTP download failed: %w", err)
-            time.Sleep(time.Second * time.Duration(i+1))
-            continue
-        }
-        defer resp.Body.Close()
-
-        // Create output file
-        file, err := os.Create(outputPath)
-        if err != nil {
-            return fmt.Errorf("creating file failed: %w", err)
-        }
-        defer file.Close()
-
-        // Copy data with timeout
-        errChan := make(chan error, 1)
-        go func() {
-            _, err := io.Copy(file, resp.Body)
-            errChan <- err
-        }()
-
-        select {
-        case err := <-errChan:
-            if err != nil {
-                lastError = fmt.Errorf("copying data failed: %w", err)
-                os.Remove(outputPath)
-                continue
-            }
-            return nil
-        case <-time.After(5 * time.Minute):
-            lastError = fmt.Errorf("download timed out")
-            os.Remove(outputPath)
-            continue
-        }
-    }
-
-    return fmt.Errorf("after %d attempts: %w", maxRetries, lastError)
 }
 
 // Convert video to MP3 using FFmpeg
