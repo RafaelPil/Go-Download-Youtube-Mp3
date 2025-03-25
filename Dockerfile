@@ -1,13 +1,10 @@
 FROM golang:1.23-alpine
 
-# Install dependencies
-RUN apk add --no-cache \
-    ffmpeg \
-    python3 \
-    py3-pip \
-    && python3 -m pip install --upgrade pip \
-    && python3 -m pip install --no-cache-dir yt-dlp
-
+# 1. Install FFmpeg (required for audio conversion)
+# 2. Install yt-dlp as standalone binary (no Python needed)
+RUN apk add --no-cache ffmpeg && \
+    wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp && \
+    chmod a+rx /usr/local/bin/yt-dlp
 
 WORKDIR /app
 COPY go.mod go.sum ./
