@@ -1,15 +1,11 @@
 FROM golang:1.23-alpine
 
-# Install dependencies
-RUN apk add --no-cache \
-    ffmpeg \
-    wget \
-    && wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp \
-    && chmod a+rx /usr/local/bin/yt-dlp \
-    && apk del wget
-
-# Verify installation
-RUN yt-dlp --version
+# Install dependencies with absolute path verification
+RUN apk add --no-cache ffmpeg && \
+    wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/bin/yt-dlp && \
+    chmod a+rx /usr/bin/yt-dlp && \
+    ln -s /usr/bin/yt-dlp /usr/local/bin/yt-dlp && \
+    /usr/bin/yt-dlp --version
 
 WORKDIR /app
 COPY go.mod go.sum ./
