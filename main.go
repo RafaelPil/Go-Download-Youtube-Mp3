@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"net/url"
@@ -8,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
@@ -163,93 +163,48 @@ func isYouTubeLink(url string) bool {
 
 // Download and convert YouTube video to MP3
 func downloadAndConvert(videoURL, outputDir string) (string, error) {
-	// Generate unique filename
-	videoID := strings.Split(videoURL, "v=")[1]
-	if strings.Contains(videoID, "&") {
-		videoID = strings.Split(videoID, "&")[0]
+	// Generate safe filename
+	videoID := ""
+	if strings.Contains(videoURL, "v=") {
+		videoID = strings.Split(strings.Split(videoURL, "v=")[1], "&")[0]
+	} else if strings.Contains(videoURL, "youtu.be/") {
+		videoID = strings.Split(strings.Split(videoURL, "youtu.be/")[1], "?")[0]
 	}
+	
+	if videoID == "" {
+		return "", fmt.Errorf("could not extract video ID from URL")
+	}
+
 	mp3Path := filepath.Join(outputDir, fmt.Sprintf("%s.mp3", videoID))
 
-	// yt-dlp command to download and convert in one step
+	// yt-dlp command with better error handling
 	cmd := exec.Command("yt-dlp",
 		"-x",                     // Extract audio
 		"--audio-format", "mp3",  // Convert to MP3
 		"--audio-quality", "0",   // Best quality
 		"-o", mp3Path,            // Output path
-		videoURL,                 // YouTube URL
-		"--force-overwrites",     // Overwrite if exists
-		"--quiet",                // Less verbose output
+		"--no-warnings",          // Suppress warnings
+		"--ignore-errors",        // Continue on errors
+		"--extract-audio",        // Audio only
+		videoURL,
 	)
 
-	// Run with timeout
-	done := make(chan error, 1)
-	go func() {
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			done <- fmt.Errorf("%v: %s", err, string(output))
-			return
-		}
-		done <- nil
-	}()
+	// Capture output for debugging
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
-	select {
-	case err := <-done:
-		if err != nil {
-			return "", fmt.Errorf("yt-dlp failed: %w", err)
-		}
-	case <-time.After(10 * time.Minute):
-		return "", fmt.Errorf("conversion timed out after 10 minutes")
+	// Run with timeout
+	err := cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("yt-dlp error: %v\nStdout: %s\nStderr: %s", 
+			err, stdout.String(), stderr.String())
 	}
 
-	// Verify output exists
+	// Verify output
 	if _, err := os.Stat(mp3Path); os.IsNotExist(err) {
 		return "", fmt.Errorf("output file not created")
 	}
 
 	return mp3Path, nil
-}
-
-// Convert video to MP3 using FFmpeg
-func convertToMP3(inputPath, outputPath string) error {
-	// Check if input file exists
-	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
-		return fmt.Errorf("input file not found")
-	}
-
-	// Prepare FFmpeg command
-	cmd := exec.Command(
-		"ffmpeg",
-		"-i", inputPath,       // Input file
-		"-vn",                 // No video
-		"-c:a", "libmp3lame", // MP3 codec
-		"-q:a", "2",          // Quality (2 = ~190 kbps VBR)
-		"-y",                 // Overwrite output
-		outputPath,           // Output file
-	)
-
-	// Capture output for debugging
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-
-	// Run the command with timeout
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Run()
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			return fmt.Errorf("ffmpeg error: %w", err)
-		}
-	case <-time.After(5 * time.Minute):
-		return fmt.Errorf("conversion timed out after 5 minutes")
-	}
-
-	// Verify output file was created
-	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
-		return fmt.Errorf("output file not created")
-	}
-
-	return nil
 }

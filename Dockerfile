@@ -1,7 +1,16 @@
 FROM golang:1.23-alpine
 
-RUN apk add --no-cache ffmpeg git gcc musl-dev && \
-    apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community yt-dlp
+# Install dependencies with proper repositories
+RUN apk update && \
+    apk add --no-cache \
+    ffmpeg \
+    python3 \
+    py3-pip \
+    git \
+    gcc \
+    musl-dev && \
+    pip3 install --upgrade yt-dlp && \
+    rm -rf /var/cache/apk/*
 
 WORKDIR /app
 COPY go.mod go.sum ./
